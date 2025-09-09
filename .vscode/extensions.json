@@ -1,0 +1,12 @@
+{
+	"recommendations": [
+		"llvm-vs-code-extensions.vscode-clangd",
+    	"vadimcn.vscode-lldb",
+		"cschlosser.doxdocgen",
+		"ms-vscode.hexeditor",
+		"ms-vscode.makefile-tools",
+		"deimonn.oro-theme",
+		"christian-kohler.path-intellisense",
+		"wayou.vscode-todo-highlight"
+	]
+}

@@ -1,0 +1,63 @@
+{
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "Build App",
+            "windows": {
+                "command": "${workspaceFolder}/build-all.bat",
+            },
+            "linux": {
+                "command": "${workspaceFolder}/build-all.sh",
+            },
+            "osx": {
+                "command": "${workspaceFolder}/build-all-macos.sh",
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": true,
+                "clear": true,
+                "close": false
+            }
+        },
+        {
+            "type": "shell",
+            "label": "Build for Release",
+            "windows": {
+                "command": "${workspaceFolder}/release-all.bat",
+            },
+            "linux": {
+                "command": "${workspaceFolder}/release-all.sh",
+            },
+            "osx": {
+                "command": "${workspaceFolder}/release-all-macos.sh",
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": true,
+                "clear": true,
+                "close": false
+            }
+        }
+    ],
+    "version": "2.0.0"
+}
