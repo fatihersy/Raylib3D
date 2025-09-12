@@ -9,184 +9,194 @@
 #include <core/fmemory.h>
 
 #define GLSL_VERSION 330
+#define RESOURCE_FILE "../app/custom_resources/"
 
-#define ZEROVEC3 (Vector3 {0.f, 0.f, 0.f})
-
-//----------------------------------------------------------------------------------
-// Types and Structures Definition
-//----------------------------------------------------------------------------------
-typedef struct {
+typedef struct raymarch_locs {
   unsigned int camPos;
   unsigned int camDir;
   unsigned int screenCenter;
-  unsigned int delta_time;
+  unsigned int time;
 } raymarch_locs;
+
+typedef struct map_obj_locs {
+  unsigned int time;
+  unsigned int viewPos;
+  unsigned int viewCenter;
+  unsigned int resolution;
+} map_obj_locs;
+
+typedef struct cloud_cube_locs {
+  unsigned int time;
+  unsigned int viewPos;
+  unsigned int viewDir;
+  unsigned int resolution;
+  unsigned int uNoise;
+} cloud_cube_locs;
 
 typedef struct main_system_state {
 	Model guide_plane;
 	Model cloud_cube;
 } main_system_state;
-
 static main_system_state * state = nullptr;
 
-//------------------------------------------------------------------------------------
-// Module Functions Declaration
-//------------------------------------------------------------------------------------
 // Load custom render texture, create a writable depth texture buffer
 static RenderTexture2D LoadRenderTextureDepthTex(int width, int height);
-// Unload render texture from GPU memory (VRAM)
 static void UnloadRenderTextureDepthTex(RenderTexture2D target);
-
 void draw_guide_plane(void);
+const char * rsrc(const char * file_name);
 
-//------------------------------------------------------------------------------------
-// Program main entry point
-//------------------------------------------------------------------------------------
 int main(void) {
-  // Initialization
-  //--------------------------------------------------------------------------------------
 	memory_system_initialize();
-
 	state = (main_system_state*)allocate_memory_linear(sizeof(main_system_state), true);
 
-  const int screenWidth = 1280;
-  const int screenHeight = 720;
+  const Vector2 resolution = Vector2 { 1280.f, 720.f };
+  InitWindow(resolution.x, resolution.y, "raylib [shaders] example - hybrid render");
 
-  InitWindow(screenWidth, screenHeight, "raylib [shaders] example - hybrid render");
-
-  // This Shader calculates pixel depth and color using raymarch
-  Shader shdrRaymarch = LoadShader(0, TextFormat("resources/shaders/glsl%i/hybrid_raymarch.fs", GLSL_VERSION));
 	Image checker_image = GenImageChecked(1024, 1024, 512, 512, Color {128, 142, 155, 255}, Color {72, 84, 96, 255});
 	Texture checker_texture = LoadTextureFromImage(checker_image);
+  //Image noise_img = GenImagePerlinNoise(1024, 1024, 25, 25, 5.f);
+  //Texture noise_tex = LoadTextureFromImage(noise_img);
 
-	Mesh plane_mesh = GenMeshPlane(20.f, 20.f, 1.f, 1.f);
-	state->guide_plane = LoadModelFromMesh(plane_mesh);
+	Shader shdr_map_obj = LoadShader(0, TextFormat(rsrc("map_objects.fs"), GLSL_VERSION));
+  map_obj_locs map_obj_shdr_locs;
+  map_obj_shdr_locs.time = GetShaderLocation(shdr_map_obj, "time");
+  map_obj_shdr_locs.viewPos = GetShaderLocation(shdr_map_obj, "viewPos");
+  map_obj_shdr_locs.viewCenter = GetShaderLocation(shdr_map_obj, "viewCenter");
+  map_obj_shdr_locs.resolution = GetShaderLocation(shdr_map_obj, "resolution");
 
-	Mesh cloud_cube = GenMeshCube(2.f, 2.f, 2.f);
-	state->cloud_cube = LoadModelFromMesh(cloud_cube);
-
-	state->guide_plane.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = checker_texture;
-
-  // This Shader is a standard rasterization fragment shader with the addition
-  // of depth writing You are required to write depth for all shaders if one
-  // shader does it
-  Shader shdrRaster = LoadShader(0, TextFormat("resources/shaders/glsl%i/hybrid_raster.fs", GLSL_VERSION));
-	Shader shdrTiling = LoadShader(0, TextFormat("resources/shaders/glsl%i/tiling.fs", GLSL_VERSION));
+  SetShaderValue(shdr_map_obj, map_obj_shdr_locs.resolution, &(resolution), RL_SHADER_UNIFORM_VEC2);
 
 	std::array<f32, 2> tiling = std::array<f32, 2>({ 10.0f, 10.0f });
+	Shader shdrTiling = LoadShader(0, TextFormat(rsrc("tiling.fs"), GLSL_VERSION));
 	SetShaderValue(shdrTiling, GetShaderLocation(shdrTiling, "tiling"), tiling.data(), SHADER_UNIFORM_VEC2);
+	Mesh plane_mesh = GenMeshPlane(20.f, 20.f, 1.f, 1.f);
+	state->guide_plane = LoadModelFromMesh(plane_mesh);
+	state->guide_plane.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = checker_texture;
   state->guide_plane.materials[0].shader = shdrTiling;
 
-  // Declare Struct used to store camera locs
-  raymarch_locs marchLocs = {};
+  Shader shdrCloud = LoadShader(0, TextFormat(rsrc("cloud_cube.fs"), GLSL_VERSION));
+  cloud_cube_locs cloud_shdr_locs;
+  Vector3 cloud_cube_dims = Vector3 {20.f, 1.f, 20.f};
+  {
+	  Mesh cloud_cube = GenMeshCube(cloud_cube_dims.x, cloud_cube_dims.y, cloud_cube_dims.z);
+	  state->cloud_cube = LoadModelFromMesh(cloud_cube);
+    cloud_shdr_locs.time = GetShaderLocation(shdrCloud, "time");
+    cloud_shdr_locs.viewPos = GetShaderLocation(shdrCloud, "viewPos");
+    cloud_shdr_locs.viewDir = GetShaderLocation(shdrCloud, "viewDir");
+    cloud_shdr_locs.resolution = GetShaderLocation(shdrCloud, "resolution");
+    cloud_shdr_locs.uNoise = GetShaderLocation(shdrCloud, "uNoise");
+    
+	  state->cloud_cube.materials[0].shader = shdrCloud;
+	  state->cloud_cube.materials[0].maps[0].texture = checker_texture;
+    SetShaderValue(shdrCloud, cloud_shdr_locs.resolution, &(resolution), RL_SHADER_UNIFORM_VEC2);
+    //SetShaderValueTexture(shdrCloud, cloud_shdr_locs.uNoise, noise_tex);
+  }
 
-  // Fill the struct with shader locs
-  marchLocs.camPos = GetShaderLocation(shdrRaymarch, "camPos");
-  marchLocs.camDir = GetShaderLocation(shdrRaymarch, "camDir");
-  marchLocs.screenCenter = GetShaderLocation(shdrRaymarch, "screenCenter");
-  marchLocs.delta_time = GetShaderLocation(shdrRaymarch, "delta_time");
+  Shader shdrRaymarch = LoadShader(0, TextFormat(rsrc("raymarch.fs"), GLSL_VERSION));
+  raymarch_locs marchLocs;
+  {
+    // This Shader calculates pixel depth and color using raymarch
+    marchLocs.camPos = GetShaderLocation(shdrRaymarch, "camPos");
+    marchLocs.camDir = GetShaderLocation(shdrRaymarch, "camDir");
+    marchLocs.screenCenter = GetShaderLocation(shdrRaymarch, "screenCenter");
+    marchLocs.time = GetShaderLocation(shdrRaymarch, "time");
 
-  // Transfer screenCenter position to shader. Which is used to calculate ray
-  // direction
-  Vector2 screenCenter = {.x = screenWidth / 2.0f, .y = screenHeight / 2.0f};
-  SetShaderValue(shdrRaymarch, marchLocs.screenCenter, &screenCenter, SHADER_UNIFORM_VEC2);
+    // Transfer screenCenter position to shader. Which is used to calculate ray
+    // direction
+    Vector2 screen_center = Vector2 {resolution.x * .5f, resolution.y * .5f};
+    SetShaderValue(shdrRaymarch, marchLocs.screenCenter, &screen_center, SHADER_UNIFORM_VEC2);
+  }
 
-  // Use Customized function to create writable depth texture buffer
-  RenderTexture2D target = LoadRenderTextureDepthTex(screenWidth, screenHeight);
-
-  // Define the camera to look into our 3d world
-  Camera camera = {
-    .position = Vector3{0.5f, 1.0f, 1.5f}, // Camera position
-    .target = Vector3{0.0f, 0.5f, 0.0f},   // Camera looking at point
-    .up = Vector3{0.0f, 1.0f, 0.0f}, // Camera up vector (rotation towards target)
-    .fovy = 45.0f,       // Camera field-of-view Y
-    .projection = CAMERA_PERSPECTIVE // Camera projection type
-  };
-
-  // Camera FOV is pre-calculated in the camera distance
-  float camDist = 1.0f / (tanf(camera.fovy * 0.5f * DEG2RAD));
-
-  SetTargetFPS(60); // Set our game to run at 60 frames-per-second
-  //--------------------------------------------------------------------------------------
-
+  SetTargetFPS(60); 
 	DisableCursor();
 
-	f32 delta_time = 0.f;
+  // Use Customized function to create writable depth texture buffer
+  RenderTexture2D target = LoadRenderTextureDepthTex(resolution.x, resolution.y);
+  // Define the camera to look into our 3d world
+  Camera camera = { Vector3{0.5f, 1.0f, 1.5f}, Vector3{0.0f, 0.5f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, 45.0f, CAMERA_PERSPECTIVE};
 
-  // Main game loop
-  while (!WindowShouldClose()) // Detect window close button or ESC key
+	[[__maybe_unused__]] f32 delta_time = 0.f;
+  [[__maybe_unused__]] Vector4 cloud_pos = Vector4(0.f, 10.f, 0.f);
+	f32 elapsed_time = 0.f;
+	Vector3 viewPos = Vector3 {0.f, 1.f, -3.f};
+	Vector3 viewCenter = Vector3 {0.f, 0.f, 0.f};
+
+  while (!WindowShouldClose())
   {
-    // Update
-    //----------------------------------------------------------------------------------
     UpdateCamera(&camera, CAMERA_FREE);
 		delta_time = GetFrameTime();
+		elapsed_time = GetTime();
+		viewPos = Vector3 { camera.position.x, camera.position.y, camera.position.z };
+		viewCenter = Vector3 { camera.target.x, camera.target.y, camera.target.z };
 
-    // Update Camera Postion in the ray march shader
-    SetShaderValue(shdrRaymarch, marchLocs.camPos, &(camera.position), RL_SHADER_UNIFORM_VEC3);
-
+    // Camera FOV is pre-calculated in the camera distance
+    f32 camDist = 1.0f / (tanf(camera.fovy * 0.5f * DEG2RAD));
     // Update Camera Looking Vector. Vector length determines FOV
-    Vector3 camDir = Vector3Scale(Vector3Normalize(Vector3Subtract(camera.target, camera.position)), camDist);
-    SetShaderValue(shdrRaymarch, marchLocs.camDir, &(camDir), RL_SHADER_UNIFORM_VEC3);
-    SetShaderValue(shdrRaymarch, marchLocs.delta_time, &(delta_time), RL_SHADER_UNIFORM_FLOAT);
-    //----------------------------------------------------------------------------------
+    Vector3 viewDir = Vector3Scale(Vector3Normalize(Vector3Subtract(camera.target, camera.position)), camDist);
 
-    // Draw
+    SetShaderValue(shdrRaymarch, marchLocs.camPos, &(viewPos), RL_SHADER_UNIFORM_VEC3);
+    SetShaderValue(shdrRaymarch, marchLocs.camDir, &(viewDir), RL_SHADER_UNIFORM_VEC3);
+    SetShaderValue(shdrRaymarch, marchLocs.time, &(elapsed_time), RL_SHADER_UNIFORM_FLOAT);
+
+    SetShaderValue(shdrCloud, cloud_shdr_locs.viewPos, &(viewPos), RL_SHADER_UNIFORM_VEC3);
+    SetShaderValue(shdrCloud, cloud_shdr_locs.viewDir, &(viewDir), RL_SHADER_UNIFORM_VEC3);
+    SetShaderValue(shdrCloud, cloud_shdr_locs.time, 	 &(elapsed_time), RL_SHADER_UNIFORM_FLOAT);
+    
+    SetShaderValue(shdr_map_obj, map_obj_shdr_locs.viewPos, &(viewPos), RL_SHADER_UNIFORM_VEC3);
+    SetShaderValue(shdr_map_obj, map_obj_shdr_locs.viewCenter, &(viewCenter), RL_SHADER_UNIFORM_VEC3);
+    SetShaderValue(shdr_map_obj, map_obj_shdr_locs.time, 	 &(elapsed_time), RL_SHADER_UNIFORM_FLOAT);
+
     //----------------------------------------------------------------------------------
-    // Draw into our custom render texture (framebuffer)
     BeginTextureMode(target);
 		{
     	ClearBackground(WHITE);
+    	rlEnableDepthTest();
 
-    	// Raymarch Scene
-    	rlEnableDepthTest(); // Manually enable Depth Test to handle multiple rendering methods
-    	BeginShaderMode(shdrRaymarch);
-			{
-				DrawRectangleRec(Rectangle{0, 0, (float)screenWidth, (float)screenHeight}, WHITE);
+    	BeginShaderMode(shdrCloud); 
+      {
+				DrawRectangleRec(Rectangle{0.f, 0.f,  resolution.x, resolution.y}, WHITE);
 			}
     	EndShaderMode();
 
-    	// Rasterize Scene
     	BeginMode3D(camera);
 			{
-				BeginShaderMode(shdrRaster);
-				{
-					DrawModel(state->cloud_cube, Vector3 {0.f, 1.f, 0.f}, 1.f, WHITE);
-				}
-				EndShaderMode();
+				//draw_guide_plane();
 
-				draw_guide_plane();
+        
+    	  //BeginShaderMode(shdr_map_obj); 
+        //{
+        //  //DrawCubeWires(Vector3 {cube_pos.x, cube_pos.y, cube_pos.z}, cloud_cube_rad * 2.f, cloud_cube_rad * 2.f, cloud_cube_rad * 2.f, BLACK);
+			  //}
+    	  //EndShaderMode();
+
+    	  //BeginShaderMode(shdrCloud); 
+        //{
+        //  //SetShaderValueTexture(shdrCloud, cloud_shdr_locs.uNoise, noise_tex);
+        //  DrawModel(state->cloud_cube, Vector3 {cloud_pos.x, cloud_pos.y, cloud_pos.z, }, 1.f, WHITE);
+			  //}
+    	  //EndShaderMode();
 			}
     	EndMode3D();
+      
 		}
-
     EndTextureMode();
-
-    // Draw into screen our custom render texture
-    BeginDrawing();
-    ClearBackground(RAYWHITE);
-
-    DrawTextureRec(target.texture, Rectangle{0, 0, (float)screenWidth, (float)-screenHeight}, Vector2{0, 0}, WHITE);
-    DrawFPS(10, 10);
-    EndDrawing();
     //----------------------------------------------------------------------------------
+
+    BeginDrawing();
+      ClearBackground(RAYWHITE);
+      DrawTextureRec(target.texture, Rectangle{0, 0, resolution.x, -resolution.y}, Vector2{0.f, 0.f}, WHITE);
+      DrawFPS(10, 10);
+    EndDrawing();
   }
 
-  // De-Initialization
-  //--------------------------------------------------------------------------------------
   UnloadRenderTextureDepthTex(target);
   UnloadShader(shdrRaymarch);
-  UnloadShader(shdrRaster);
-
-  CloseWindow(); // Close window and OpenGL context
-  //--------------------------------------------------------------------------------------
-
+  UnloadShader(shdrCloud);
+  UnloadShader(shdrTiling);
+  CloseWindow();
   return 0;
 }
 
-//------------------------------------------------------------------------------------
-// Module Functions Definition
-//------------------------------------------------------------------------------------
-// Load custom render texture, create a writable depth texture buffer
 static RenderTexture2D LoadRenderTextureDepthTex(int width, int height) {
   RenderTexture2D target = {};
 
@@ -223,7 +233,6 @@ static RenderTexture2D LoadRenderTextureDepthTex(int width, int height) {
 
   return target;
 }
-// Unload render texture from GPU memory (VRAM)
 static void UnloadRenderTextureDepthTex(RenderTexture2D target) {
   if (target.id > 0) {
     // Color texture attached to FBO is deleted
@@ -235,7 +244,6 @@ static void UnloadRenderTextureDepthTex(RenderTexture2D target) {
     rlUnloadFramebuffer(target.id);
   }
 }
-
 void draw_guide_plane(void) {
 	DrawModel(state->guide_plane, Vector3 {0.f, 0.f, 0.f}, 2.f, WHITE);
 
@@ -245,3 +253,12 @@ void draw_guide_plane(void) {
 	// Z Axis GREEN
 	DrawLine3D(Vector3 { 0.f, 0.f, 20.f}, Vector3 {0.f, 0.f, -20.f}, GREEN);
 }
+
+const char * rsrc(const char * file_name) {
+  return TextFormat("%s%s", RESOURCE_FILE, file_name);
+}
+
+//BeginShaderMode(shdr_ray_obj); 
+//{
+//}
+//EndShaderMode();
