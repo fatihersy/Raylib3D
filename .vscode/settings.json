@@ -10,7 +10,7 @@
     },
     "editor.minimap.enabled": false,
     "editor.indentSize": "tabSize",
-    "editor.tabSize": 2,
+    "editor.tabSize": 4,
     "editor.lineNumbers": "on",
     "editor.cursorStyle": "block",
     "editor.tabCompletion": "on",
