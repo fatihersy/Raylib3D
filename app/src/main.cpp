@@ -28,7 +28,7 @@ typedef struct map_obj_locs {
 typedef struct cloud_cube_locs {
   unsigned int time;
   unsigned int viewPos;
-  unsigned int viewDir;
+  unsigned int viewTarget;
   unsigned int resolution;
   unsigned int uNoise;
 } cloud_cube_locs;
@@ -82,7 +82,7 @@ int main(void) {
 	  state->cloud_cube = LoadModelFromMesh(cloud_cube);
     cloud_shdr_locs.time = GetShaderLocation(shdrCloud, "time");
     cloud_shdr_locs.viewPos = GetShaderLocation(shdrCloud, "viewPos");
-    cloud_shdr_locs.viewDir = GetShaderLocation(shdrCloud, "viewDir");
+    cloud_shdr_locs.viewTarget = GetShaderLocation(shdrCloud, "viewTarget");
     cloud_shdr_locs.resolution = GetShaderLocation(shdrCloud, "resolution");
     cloud_shdr_locs.uNoise = GetShaderLocation(shdrCloud, "uNoise");
     
@@ -113,13 +113,19 @@ int main(void) {
   // Use Customized function to create writable depth texture buffer
   RenderTexture2D target = LoadRenderTextureDepthTex(resolution.x, resolution.y);
   // Define the camera to look into our 3d world
-  Camera camera = { Vector3{0.5f, 1.0f, 1.5f}, Vector3{0.0f, 0.5f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, 45.0f, CAMERA_PERSPECTIVE};
+  Camera camera = Camera { 
+    Vector3{0.5f, 1.0f, 1.5f}, // POSITION
+    Vector3{0.0f, 0.0f, 0.7f}, // TARGET
+    Vector3{0.0f, 1.0f, 0.0f}, // UP
+    90.0f, // FOV
+    CAMERA_PERSPECTIVE
+  };
 
 	[[__maybe_unused__]] f32 delta_time = 0.f;
   [[__maybe_unused__]] Vector4 cloud_pos = Vector4(0.f, 10.f, 0.f);
 	f32 elapsed_time = 0.f;
-	Vector3 viewPos = Vector3 {0.f, 1.f, -3.f};
-	Vector3 viewCenter = Vector3 {0.f, 0.f, 0.f};
+	Vector3 viewPos = Vector3 {0.f, 0.f, 0.f};
+	Vector3 viewTarget = Vector3 {0.f, 0.f, 0.f};
 
   while (!WindowShouldClose())
   {
@@ -127,7 +133,7 @@ int main(void) {
 		delta_time = GetFrameTime();
 		elapsed_time = GetTime();
 		viewPos = Vector3 { camera.position.x, camera.position.y, camera.position.z };
-		viewCenter = Vector3 { camera.target.x, camera.target.y, camera.target.z };
+		viewTarget = Vector3 { camera.target.x, camera.target.y, camera.target.z };
 
     // Camera FOV is pre-calculated in the camera distance
     f32 camDist = 1.0f / (tanf(camera.fovy * 0.5f * DEG2RAD));
@@ -136,14 +142,14 @@ int main(void) {
 
     SetShaderValue(shdrRaymarch, marchLocs.camPos, &(viewPos), RL_SHADER_UNIFORM_VEC3);
     SetShaderValue(shdrRaymarch, marchLocs.camDir, &(viewDir), RL_SHADER_UNIFORM_VEC3);
-    SetShaderValue(shdrRaymarch, marchLocs.time, &(elapsed_time), RL_SHADER_UNIFORM_FLOAT);
+    SetShaderValue(shdrRaymarch, marchLocs.time,   &(elapsed_time), RL_SHADER_UNIFORM_FLOAT);
 
-    SetShaderValue(shdrCloud, cloud_shdr_locs.viewPos, &(viewPos), RL_SHADER_UNIFORM_VEC3);
-    SetShaderValue(shdrCloud, cloud_shdr_locs.viewDir, &(viewDir), RL_SHADER_UNIFORM_VEC3);
-    SetShaderValue(shdrCloud, cloud_shdr_locs.time, 	 &(elapsed_time), RL_SHADER_UNIFORM_FLOAT);
+    SetShaderValue(shdrCloud, cloud_shdr_locs.viewPos,    &(viewPos), RL_SHADER_UNIFORM_VEC3);
+    SetShaderValue(shdrCloud, cloud_shdr_locs.viewTarget, &(viewTarget), RL_SHADER_UNIFORM_VEC3);
+    SetShaderValue(shdrCloud, cloud_shdr_locs.time, 	    &(elapsed_time), RL_SHADER_UNIFORM_FLOAT);
     
     SetShaderValue(shdr_map_obj, map_obj_shdr_locs.viewPos, &(viewPos), RL_SHADER_UNIFORM_VEC3);
-    SetShaderValue(shdr_map_obj, map_obj_shdr_locs.viewCenter, &(viewCenter), RL_SHADER_UNIFORM_VEC3);
+    SetShaderValue(shdr_map_obj, map_obj_shdr_locs.viewCenter, &(viewTarget), RL_SHADER_UNIFORM_VEC3);
     SetShaderValue(shdr_map_obj, map_obj_shdr_locs.time, 	 &(elapsed_time), RL_SHADER_UNIFORM_FLOAT);
 
     //----------------------------------------------------------------------------------
