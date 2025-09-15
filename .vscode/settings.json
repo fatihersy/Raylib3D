@@ -1,7 +1,7 @@
 {
     "window.zoomLevel": 0,
     "files.autoSave": "onFocusChange",
-    "workbench.colorTheme": "Quiet Light",
+    "workbench.colorTheme": "Oro Theme",
     "workbench.editor.showTabs": "multiple",
     "workbench.statusBar.visible": true,
     "workbench.colorCustomizations": {
@@ -111,5 +111,5 @@
     "clangd.fallbackFlags": [
         "-std=c++23"
     ],
-    "clangd.path": "clangd",
+    "clangd.path": "clangd"
 }

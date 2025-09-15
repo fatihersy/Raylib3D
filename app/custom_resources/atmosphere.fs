@@ -347,14 +347,14 @@ void main() {
 
         fin_col = apply_fog_exp2(scene_color, fogColor, distance_for_fog, FOG_DENSITY);
     }
-    else {
-        // Ground path
-        float ground_dist = 0.0;
-        vec3 ground_color = render_ground(viewPos, ray_direction, ground_dist);
-
-        // apply fog based on ground_dist
-        fin_col = apply_fog_exp2(ground_color, fogColor, ground_dist, FOG_DENSITY);
-    }
+    //else {
+    //    // Ground path
+    //    float ground_dist = 0.0;
+    //    vec3 ground_color = render_ground(viewPos, ray_direction, ground_dist);
+    
+    //    // apply fog based on ground_dist
+    //    fin_col = apply_fog_exp2(ground_color, fogColor, ground_dist, FOG_DENSITY);
+    //}
 
     // gamma correction
     fin_col = pow(fin_col, vec3(1.0 / 2.2));
