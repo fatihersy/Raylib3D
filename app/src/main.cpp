@@ -9,33 +9,35 @@
 #include <core/fmemory.h>
 
 #define GLSL_VERSION 330
-#define RESOURCE_FILE "../app/custom_resources/"
+#define SHADER_FILE "../app/custom_resources/"
+#define TERRAIN_FILE "./terrain/"
 
 typedef struct raymarch_locs {
-  unsigned int camPos;
-  unsigned int camDir;
-  unsigned int screenCenter;
-  unsigned int time;
+  u32 camPos;
+  u32 camDir;
+  u32 screenCenter;
+  u32 time;
 } raymarch_locs;
 
 typedef struct map_obj_locs {
-  unsigned int time;
-  unsigned int viewPos;
-  unsigned int viewCenter;
-  unsigned int resolution;
+  u32 time;
+  u32 viewPos;
+  u32 viewCenter;
+  u32 resolution;
 } map_obj_locs;
 
 typedef struct atmosphere_locs {
-  unsigned int time;
-  unsigned int viewPos;
-  unsigned int viewTarget;
-  unsigned int resolution;
-  unsigned int uNoise;
+  u32 time;
+  u32 viewPos;
+  u32 viewTarget;
+  u32 resolution;
 } atmosphere_locs;
 
 typedef struct terrain_locs {
-  unsigned int viewPos;
-  unsigned int time;
+  u32 viewPos;
+  u32 viewTarget;
+  u32 resolution;
+  u32 time;
 } terrain_locs;
 
 typedef struct main_system_state {
@@ -49,6 +51,7 @@ static RenderTexture2D LoadRenderTextureDepthTex(int width, int height);
 static void UnloadRenderTextureDepthTex(RenderTexture2D target);
 void draw_guide_plane(void);
 const char * rsrc(const char * file_name);
+const char * rterr(const char * file_name);
 
 int main(void) {
 	memory_system_initialize();
@@ -61,7 +64,7 @@ int main(void) {
 	Texture checker_texture = LoadTextureFromImage(checker_image);
 
 	Shader shdr_map_obj = LoadShader(0, TextFormat(rsrc("map_objects.fs"), GLSL_VERSION));
-  map_obj_locs map_obj_shdr_locs;
+  map_obj_locs map_obj_shdr_locs = {};
   map_obj_shdr_locs.time = GetShaderLocation(shdr_map_obj, "time");
   map_obj_shdr_locs.viewPos = GetShaderLocation(shdr_map_obj, "viewPos");
   map_obj_shdr_locs.viewCenter = GetShaderLocation(shdr_map_obj, "viewCenter");
@@ -83,34 +86,45 @@ int main(void) {
     .viewPos = static_cast<u32>(GetShaderLocation(shdrAtmosphere, "viewPos")),
     .viewTarget = static_cast<u32>(GetShaderLocation(shdrAtmosphere, "viewTarget")),
     .resolution = static_cast<u32>(GetShaderLocation(shdrAtmosphere, "resolution")),
-    .uNoise = static_cast<u32>(GetShaderLocation(shdrAtmosphere, "uNoise")),
   };
 
   SetShaderValue(shdrAtmosphere, atmosphere_shdr_locs.resolution, &(resolution), RL_SHADER_UNIFORM_VEC2);
 
   // Create terrain
-  Shader shdrTerrain = LoadShader(0, rsrc("terrain.fs"));
-  terrain_locs terrain_shdr_locs;
-  {
-    // Generate heightmap image for terrain
-    Image heightmap = GenImagePerlinNoise(256, 256, 0, 0, 5.0f);
-    
-    // Create terrain mesh from heightmap
-    Mesh terrain_mesh = GenMeshHeightmap(heightmap, Vector3{100.0f, 10.0f, 100.0f});
-    state->terrain = LoadModelFromMesh(terrain_mesh);
-    
-    // Set terrain shader and texture
-    state->terrain.materials[0].shader = shdrTerrain;
-    state->terrain.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = checker_texture;
-    
-    // Get shader locations
-    terrain_shdr_locs.viewPos = GetShaderLocation(shdrTerrain, "viewPos");
-    terrain_shdr_locs.time = GetShaderLocation(shdrTerrain, "time");
-    
-    // Clean up
-    UnloadImage(heightmap);
-  }
+  [[__maybe_unused__]] Texture2D rocks_tex = LoadTexture(rterr("mntn_gray_d.jpg"));
+  [[__maybe_unused__]] Texture2D grass_tex = LoadTexture(rterr("grass_green_d.jpg"));
+  [[__maybe_unused__]] Texture2D snow_tex = LoadTexture(rterr("snow1_d.jpg"));
 
+  Shader shdrTerrain = LoadShader(0, rsrc("terrain.fs"));
+  terrain_locs terrain_shdr_locs = {};
+  terrain_shdr_locs.viewPos    = GetShaderLocation(shdrTerrain, "viewPos");
+  terrain_shdr_locs.viewTarget = GetShaderLocation(shdrTerrain, "viewTarget");
+  terrain_shdr_locs.resolution = GetShaderLocation(shdrTerrain, "resolution");
+  terrain_shdr_locs.time = GetShaderLocation(shdrTerrain, "time");
+
+  SetShaderValue(shdrTerrain, terrain_shdr_locs.resolution, &(resolution), RL_SHADER_UNIFORM_VEC2);
+
+  // Generate heightmap image for terrain
+  Image heightmap_img = GenImagePerlinNoise(256, 256, 0, 0, 5.0f);    // Load heightmap image (RAM)
+  Texture2D height_texture = LoadTextureFromImage(heightmap_img);    
+  
+  // Create terrain mesh from heightmap
+  Mesh terrain_mesh = GenMeshHeightmap(heightmap_img, Vector3{100.0f, 10.0f, 100.0f});
+  state->terrain = LoadModelFromMesh(terrain_mesh);
+  
+  // Set terrain shader and texture
+  state->terrain.materials[0].shader = shdrTerrain;
+  state->terrain.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = height_texture;
+  state->terrain.materials[0].maps[MATERIAL_MAP_METALNESS].texture = rocks_tex;
+  state->terrain.materials[0].maps[MATERIAL_MAP_EMISSION].texture = grass_tex;
+  state->terrain.materials[0].maps[MATERIAL_MAP_OCCLUSION].texture = snow_tex;
+  shdrTerrain.locs[SHADER_LOC_MAP_METALNESS] = GetShaderLocation(shdrTerrain, "texture1");
+  shdrTerrain.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(shdrTerrain, "texture2");
+  shdrTerrain.locs[SHADER_LOC_MAP_OCCLUSION] = GetShaderLocation(shdrTerrain, "texture3");
+  
+  // Clean up
+  UnloadImage(heightmap_img);
+  
   SetTargetFPS(60); 
 	DisableCursor();
 
@@ -150,6 +164,7 @@ int main(void) {
     
     // Update terrain shader uniforms
     SetShaderValue(shdrTerrain, terrain_shdr_locs.viewPos, &(viewPos), RL_SHADER_UNIFORM_VEC3);
+    SetShaderValue(shdrTerrain, terrain_shdr_locs.viewTarget, &(viewTarget), RL_SHADER_UNIFORM_VEC3);
     SetShaderValue(shdrTerrain, terrain_shdr_locs.time, &(elapsed_time), RL_SHADER_UNIFORM_FLOAT);
     
     SetShaderValue(shdr_map_obj, map_obj_shdr_locs.viewPos, &(viewPos), RL_SHADER_UNIFORM_VEC3);
@@ -255,10 +270,10 @@ void draw_guide_plane(void) {
 }
 
 const char * rsrc(const char * file_name) {
-  return TextFormat("%s%s", RESOURCE_FILE, file_name);
+  return TextFormat("%s%s", SHADER_FILE, file_name);
 }
 
-//BeginShaderMode(shdr_ray_obj); 
-//{
-//}
-//EndShaderMode();
+const char * rterr(const char * file_name) {
+  return TextFormat("%s%s", TERRAIN_FILE, file_name);
+}
+

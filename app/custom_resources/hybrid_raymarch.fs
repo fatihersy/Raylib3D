@@ -72,11 +72,11 @@ vec2 opU(vec2 d1, vec2 d2)
 }
 
 vec2 map(in vec3 pos){
-  //vec2 res = vec2(
-	//	sdHorseshoe( pos-vec3(-1.0,0.08, 1.0), vec2(cos(1.3),sin(1.3)), 0.2, 0.3, vec2(0.03,0.5)), 
-	//	11.5
-	//);
-  //res = opU(res, vec2(sdSixWayCutHollowSphere( pos-vec3(0.0, 1.0, 0.0), 4.0, 3.5, 0.5), 4.5));
+  vec2 res = vec2(
+		sdHorseshoe( pos-vec3(-1.0,0.08, 1.0), vec2(cos(1.3),sin(1.3)), 0.2, 0.3, vec2(0.03,0.5)), 
+		11.5
+	);
+  res = opU(res, vec2(sdSixWayCutHollowSphere( pos-vec3(0.0, 1.0, 0.0), 4.0, 3.5, 0.5), 4.5));
 
 	vec2 res = vec2(1, 10);
 

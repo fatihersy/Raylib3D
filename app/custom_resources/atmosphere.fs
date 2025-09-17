@@ -332,7 +332,7 @@ void main() {
     // Precompute fogColor as sky in direction (gives natural tint)
     vec3 fogColor = render_sky_color(ray_direction);
 
-    if (dot(ray_direction, vec3(0, 1, 0)) >= 0.00) {
+    //if (dot(ray_direction, vec3(0, 1, 0)) >= 0.00) {
         // Sky + clouds
         vec3 sky = render_sky_color(ray_direction);
 
@@ -346,7 +346,7 @@ void main() {
         float distance_for_fog = (cld.a > 0.0001) ? cloud_dist : 6000.0; // large far distance for clear sky
 
         fin_col = apply_fog_exp2(scene_color, fogColor, distance_for_fog, FOG_DENSITY);
-    }
+    //}
     //else {
     //    // Ground path
     //    float ground_dist = 0.0;
